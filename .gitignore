@@ -12,7 +12,6 @@ frontend/yours_ocr_react/dist/
 frontend/yours_ocr_react/dist-ssr/
 frontend/yours_ocr_react/*.local
 
-backend/
 
 # Editor directories and files
 .vscode/*
@@ -24,3 +23,7 @@ backend/
 *.njsproj
 *.sln
 *.sw?
+
+
+# temp backend
+backend/*

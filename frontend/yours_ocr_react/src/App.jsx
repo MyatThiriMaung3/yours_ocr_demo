@@ -8,19 +8,22 @@ import figmaIcon from './assets/figma.svg';
 export default function YoursOCR() {
   const [showInstructions, setShowInstructions] = useState(false);
   const [uploadedFile, setUploadedFile] = useState(null);
+  const [imagePreview, setImagePreview] = useState(null);
   const [extractedText, setExtractedText] = useState('');
   const [showNotification, setShowNotification] = useState(false);
   const [showCopyNotification, setShowCopyNotification] = useState(false);
+
+  const [loading, setLoading] = useState(false);
 
   const handleFileUpload = (e) => {
     const file = e.target.files[0];
     if (file) {
       setUploadedFile(file);
-      // Simulate text extraction
-      const loremText = `Lorem ipsum dolor sit amet, frandor niven pellora clast. Dorem phelis quentur mavic troen falim venor. Plasmet erion dulav crentis haldor sit vennet. Traven pelic moran flict unden graviton selum. Ferand ulcor vinit aspor lenct dravis polen. Mvera clost inum pravel torent quevis falda. Dramet in volar crimis morven adest lora ven. Pliver toran quist falum dretor namic sela. Ventor claram ispen dorel mavin trat ulvim fren.
-
-Lorem ipsum dolor sit amet, frandor niven pellora clast. Dorem phelis quentur mavic troen falim venor. Plasmet erion dulav crentis haldor sit vennet. Traven pelic moran flict unden graviton selum. Ferand ulcor vinit aspor lenct dravis polen. Mvera clost inum pravel torent quevis falda. Dramet in volar crimis morven adest lora ven. Pliver toran quist falum dretor namic sela. Ventor claram ispen dorel mavin trat ulvim fren.`;
-      setExtractedText(loremText);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setImagePreview(reader.result);
+      };
+      reader.readAsDataURL(file);
     }
   };
 
@@ -33,22 +36,50 @@ Lorem ipsum dolor sit amet, frandor niven pellora clast. Dorem phelis quentur ma
     const file = e.dataTransfer.files[0];
     if (file) {
       setUploadedFile(file);
-      const loremText = `Lorem ipsum dolor sit amet, frandor niven pellora clast. Dorem phelis quentur mavic troen falim venor. Plasmet erion dulav crentis haldor sit vennet. Traven pelic moran flict unden graviton selum. Ferand ulcor vinit aspor lenct dravis polen. Mvera clost inum pravel torent quevis falda. Dramet in volar crimis morven adest lora ven. Pliver toran quist falum dretor namic sela. Ventor claram ispen dorel mavin trat ulvim fren.
-
-Lorem ipsum dolor sit amet, frandor niven pellora clast. Dorem phelis quentur mavic troen falim venor. Plasmet erion dulav crentis haldor sit vennet. Traven pelic moran flict unden graviton selum. Ferand ulcor vinit aspor lenct dravis polen. Mvera clost inum pravel torent quevis falda. Dramet in volar crimis morven adest lora ven. Pliver toran quist falum dretor namic sela. Ventor claram ispen dorel mavin trat ulvim fren.`;
-      setExtractedText(loremText);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setImagePreview(reader.result);
+      };
+      reader.readAsDataURL(file);
     }
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!uploadedFile) {
       setShowNotification(true);
       setTimeout(() => setShowNotification(false), 3000);
+      return;
+    }
+
+    setLoading(true);
+    const formData = new FormData();
+    formData.append('file', uploadedFile);
+
+    try {
+      const response = await fetch('http://localhost:8000/api/v1/extract-text', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await response.json();
+      
+      if (data.success) {
+        setExtractedText(data.results.full_text);
+        console.log('Detected words:', data.results.words);
+      } else {
+        alert('Failed to extract text');
+      }
+    } catch (error) {
+      console.error('Error:', error);
+      alert('Failed to process image. Make sure the backend is running.');
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleCancel = () => {
     setUploadedFile(null);
+    setImagePreview(null);
     setExtractedText('');
   };
 
@@ -165,6 +196,21 @@ Lorem ipsum dolor sit amet, frandor niven pellora clast. Dorem phelis quentur ma
           </div>
         </div>
 
+        {/* Image Preview */}
+        {imagePreview && (
+          <div className="mb-8">
+            <h3 className="text-lg mb-4" style={{ color: '#000000' }}>Uploaded Image</h3>
+            <div className="border-2 border-gray-300 rounded-lg p-4 bg-white">
+              <img 
+                src={imagePreview} 
+                alt="Uploaded preview" 
+                className="max-w-full h-auto mx-auto"
+                style={{ maxHeight: '500px' }}
+              />
+            </div>
+          </div>
+        )}
+
         {/* Action Buttons */}
         <div className="flex justify-end gap-4 mb-8">
           <button
@@ -173,12 +219,14 @@ Lorem ipsum dolor sit amet, frandor niven pellora clast. Dorem phelis quentur ma
           >
             Cancel
           </button>
+
           <button
             onClick={handleSubmit}
+            disabled={loading}
             className="px-8 py-2 text-white rounded"
             style={{ backgroundColor: '#626262' }}
           >
-            Submit
+            {loading ? 'Processing...' : 'Submit'}
           </button>
         </div>
 
