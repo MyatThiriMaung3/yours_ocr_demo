@@ -23,7 +23,3 @@ frontend/yours_ocr_react/*.local
 *.njsproj
 *.sln
 *.sw?
-
-
-# temp backend
-backend/*
