@@ -23,3 +23,7 @@ frontend/yours_ocr_react/*.local
 *.njsproj
 *.sln
 *.sw?
+
+
+# ignore cropped images
+backend/cropped_words/*
