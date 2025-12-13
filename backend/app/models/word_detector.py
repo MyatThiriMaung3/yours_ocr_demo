@@ -57,27 +57,25 @@ class WordDetector:
         Preprocess image - EXACT logic from DataLoaderImgFile
         
         Args:
-            image: BGR image from cv2.imread or numpy array
+            image: Grayscale image (H x W) numpy array
             
         Returns:
-            tuple: (preprocessed_tensor, scale_factor, original_grayscale)
+            tuple: (preprocessed_tensor, scale_factor, padded_shape)
         """
-        # Convert to grayscale if needed
-        if len(image.shape) == 3:
-            orig = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        else:
-            orig = image.copy()
-        
         # Calculate scale factor
-        f = min(self.max_side_len / orig.shape[0], self.max_side_len / orig.shape[1])
+        f = min(self.max_side_len / image.shape[0], self.max_side_len / image.shape[1])
         
         # Resize if too large
         if f < 1:
-            orig = cv2.resize(orig, dsize=None, fx=f, fy=f)
+            image = cv2.resize(image, dsize=None, fx=f, fy=f)
+        else:
+            f = 1.0
         
         # Pad to multiples of 32
-        img = np.ones((self._ceil32(orig.shape[0]), self._ceil32(orig.shape[1])), np.uint8) * 255
-        img[:orig.shape[0], :orig.shape[1]] = orig
+        padded_h = self._ceil32(image.shape[0])
+        padded_w = self._ceil32(image.shape[1])
+        img = np.ones((padded_h, padded_w), np.uint8) * 255
+        img[:image.shape[0], :image.shape[1]] = image
         
         # Normalize to [-0.5, 0.5]
         img = (img / 255 - 0.5).astype(np.float32)
@@ -86,11 +84,11 @@ class WordDetector:
         imgs = img[None, None, ...]
         imgs = torch.from_numpy(imgs).to(self.device)
         
-        return imgs, f, orig
+        return imgs, f, (padded_h, padded_w)
     
     def detect_words(self, image: np.ndarray, max_aabbs: int = 1000, padding: int = 5) -> List[Tuple[int, int, int, int]]:
         """
-        Detect word bounding boxes in image
+        Detect word bounding boxes in image - EXACT logic from infer.py
         
         Args:
             image: Input image as numpy array (BGR format from cv2.imread)
@@ -100,36 +98,44 @@ class WordDetector:
         Returns:
             List of bounding boxes [(x1, y1, x2, y2), ...]
         """
-        orig_h, orig_w = image.shape[:2] if len(image.shape) == 2 else image.shape[:2]
+        # Convert BGR to grayscale
+        if len(image.shape) == 3:
+            orig_gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        else:
+            orig_gray = image.copy()
+        
+        orig_h, orig_w = orig_gray.shape
         
         # Preprocess
-        imgs, scale_factor, orig_gray = self._preprocess_image(image)
+        imgs, scale_factor, padded_shape = self._preprocess_image(orig_gray)
         
-        # Inference with softmax (matching eval.py)
+        # Inference with softmax (matching eval.py and infer.py)
         with torch.no_grad():
             y = self.model(imgs, apply_softmax=True)
             y_np = y.to('cpu').numpy()
         
-        # Decode predictions (matching eval.py)
+        # Decode predictions (matching eval.py and infer.py)
         scale_up = 1 / self.scale_down
         pred_map = y_np[0]
         
+        # Get bounding boxes
         aabbs = decode(pred_map, comp_fg=fg_by_cc(0.5, max_aabbs), f=scale_up)
         
-        # Clip to image bounds
-        h, w = imgs.shape[2:]
+        # Clip to padded image bounds
+        h, w = padded_shape
         img_bound = AABB(0, w - 1, 0, h - 1)
         aabbs = [aabb.clip(img_bound) for aabb in aabbs]
         aabbs = [aabb for aabb in aabbs if aabb.area() > 0]
         
-        # Cluster overlapping boxes (matching eval.py)
+        # Cluster overlapping boxes (matching eval.py and infer.py)
         clustered_aabbs = cluster_aabbs(aabbs)
         
-        # Scale back to original image size WITH PADDING
+        # Scale back to ORIGINAL image size (matching infer.py)
+        # This is the key step - scale back by dividing by scale_factor
         final_bboxes = []
         
         for aabb in clustered_aabbs:
-            # Scale back: undo the resize we did in preprocessing
+            # Scale back to original size
             scaled_aabb = aabb.scale(1/scale_factor, 1/scale_factor)
             
             # Add padding
@@ -141,8 +147,5 @@ class WordDetector:
             # Only add valid boxes
             if x2 > x1 and y2 > y1:
                 final_bboxes.append((x1, y1, x2, y2))
-        
-        # keep original detection order which is already correct
-        # The detector already outputs in reading order (top-to-bottom, left-to-right)
         
         return final_bboxes
