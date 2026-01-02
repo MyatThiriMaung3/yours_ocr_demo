@@ -32,7 +32,7 @@ app.add_middleware(
 BASE_DIR = Path(__file__).resolve().parent.parent
 DETECTOR_PATH = BASE_DIR / "trained_models" / "detector" / "weights"
 DETECTOR_METADATA_PATH = BASE_DIR / "trained_models" / "detector" / "metadata.json"
-RECOGNIZER_PATH = BASE_DIR / "trained_models" / "recognizer" / "HTR_prediction_model.keras"
+RECOGNIZER_PATH = BASE_DIR / "trained_models" / "recognizer" / "htr_improved_prediction.keras"
 CHAR_CONFIG_PATH = BASE_DIR / "trained_models" / "recognizer" / "char_config.json"
 TEMP_DIR = BASE_DIR / "temp"
 CROPPED_WORDS_DIR = BASE_DIR / "cropped_words"  # New directory for cropped words
