@@ -1,5 +1,12 @@
 import React, { useState } from "react";
-import { Upload, X, ChevronLeft, ChevronRight } from "lucide-react";
+import {
+  Upload,
+  X,
+  ChevronLeft,
+  ChevronRight,
+  CheckCircle,
+  RotateCcw,
+} from "lucide-react";
 
 import linkedInIcon from "./assets/linked_in.svg";
 import gitIcon from "./assets/git.svg";
@@ -7,7 +14,7 @@ import figmaIcon from "./assets/figma.svg";
 
 export default function YoursOCR() {
   const [showInstructions, setShowInstructions] = useState(false);
-  const [uploadMode, setUploadMode] = useState("single"); // 'single' or 'multiple'
+  const [uploadMode, setUploadMode] = useState("single");
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [processedResults, setProcessedResults] = useState([]);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
@@ -15,6 +22,9 @@ export default function YoursOCR() {
   const [showCopyNotification, setShowCopyNotification] = useState(false);
   const [notificationMessage, setNotificationMessage] = useState("");
   const [loading, setLoading] = useState(false);
+  const [spellCheckLoading, setSpellCheckLoading] = useState(false);
+  const [showSpellCheckMenu, setShowSpellCheckMenu] = useState(false);
+  const [showRevertMenu, setShowRevertMenu] = useState(false);
 
   const handleFileUpload = (e) => {
     const files = Array.from(e.target.files);
@@ -29,10 +39,12 @@ export default function YoursOCR() {
       name: file.name,
       preview: null,
       extractedText: "",
+      ocrText: "", // store original ocr result
+      spellCheckedText: "", // store spell-checked result
+      isSpellChecked: false, // track if spell check has been applied
       processed: false,
     }));
 
-    // Generate previews
     fileData.forEach((item, index) => {
       const reader = new FileReader();
       reader.onloadend = () => {
@@ -75,19 +87,15 @@ export default function YoursOCR() {
     const results = [];
 
     try {
-      // process all images
       for (let i = 0; i < uploadedFiles.length; i++) {
         const formData = new FormData();
         formData.append("file", uploadedFiles[i].file);
 
         try {
-          const response = await fetch(
-            "http://localhost:8000/api/v1/extract-text",
-            {
-              method: "POST",
-              body: formData,
-            }
-          );
+          const response = await fetch("http://localhost:8000/extract-text", {
+            method: "POST",
+            body: formData,
+          });
 
           const data = await response.json();
 
@@ -95,12 +103,14 @@ export default function YoursOCR() {
             results.push({
               ...uploadedFiles[i],
               extractedText: data.results.full_text,
+              ocrText: data.results.full_text,
               processed: true,
             });
           } else {
             results.push({
               ...uploadedFiles[i],
               extractedText: "Failed to extract text",
+              ocrText: "Failed to extract text",
               processed: true,
             });
           }
@@ -109,6 +119,7 @@ export default function YoursOCR() {
           results.push({
             ...uploadedFiles[i],
             extractedText: "Error processing image",
+            ocrText: "Error processing image",
             processed: true,
           });
         }
@@ -124,6 +135,109 @@ export default function YoursOCR() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSpellCheck = async (checkAll = false) => {
+    setSpellCheckLoading(true);
+    setShowSpellCheckMenu(false);
+
+    try {
+      if (checkAll) {
+        // check spelling for all results
+        const updatedResults = [...processedResults];
+
+        for (let i = 0; i < updatedResults.length; i++) {
+          if (!updatedResults[i].isSpellChecked) {
+            const response = await fetch(
+              "http://localhost:8000/check-spelling",
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  text: updatedResults[i].ocrText,
+                }),
+              }
+            );
+
+            const data = await response.json();
+
+            if (data.success) {
+              updatedResults[i].spellCheckedText = data.corrected_text;
+              updatedResults[i].extractedText = data.corrected_text;
+              updatedResults[i].isSpellChecked = true;
+            }
+          }
+        }
+
+        setProcessedResults(updatedResults);
+        setNotificationMessage("Spell check completed for all images!");
+      } else {
+        // check spelling for current result only
+        const response = await fetch("http://localhost:8000/check-spelling", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            text: processedResults[currentImageIndex].ocrText,
+          }),
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          setProcessedResults((prev) => {
+            const updated = [...prev];
+            updated[currentImageIndex].spellCheckedText = data.corrected_text;
+            updated[currentImageIndex].extractedText = data.corrected_text;
+            updated[currentImageIndex].isSpellChecked = true;
+            return updated;
+          });
+          setNotificationMessage("Spell check completed!");
+        } else {
+          setNotificationMessage("Spell check failed");
+        }
+      }
+
+      setShowNotification(true);
+      setTimeout(() => setShowNotification(false), 3000);
+    } catch (error) {
+      console.error("Error:", error);
+      alert("Failed to check spelling. Make sure the backend is running.");
+    } finally {
+      setSpellCheckLoading(false);
+    }
+  };
+
+  const handleRevertToOCR = (revertAll = false) => {
+    setShowRevertMenu(false);
+
+    if (revertAll) {
+      // revert all results to ocr
+      setProcessedResults((prev) => {
+        return prev.map((result) => ({
+          ...result,
+          extractedText: result.ocrText,
+          isSpellChecked: false,
+        }));
+      });
+      setNotificationMessage("All results reverted to OCR!");
+    } else {
+      // revert current result only
+      setProcessedResults((prev) => {
+        const updated = [...prev];
+        updated[currentImageIndex].extractedText =
+          updated[currentImageIndex].ocrText;
+        updated[currentImageIndex].isSpellChecked = false;
+        return updated;
+      });
+      setNotificationMessage("Reverted to OCR result!");
+    }
+
+    setShowNotification(true);
+    setTimeout(() => setShowNotification(false), 2000);
   };
 
   const handleCancel = () => {
@@ -168,18 +282,15 @@ export default function YoursOCR() {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } else {
-      // for multiple files, create combined text
+      // for multiple files, create combined file
       let combinedText = "";
 
       processedResults.forEach((result, index) => {
-        combinedText += `${"=".repeat(50)}\n`;
-        combinedText += `Image ${index + 1}: ${result.name}\n`;
-        combinedText += `${"=".repeat(50)}\n\n`;
+        combinedText += `Image ${index + 1}: ${result.name}\n\n`;
         combinedText += result.extractedText;
         combinedText += "\n\n\n";
       });
 
-      // download combined file
       const blob = new Blob([combinedText], { type: "text/plain" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -190,21 +301,7 @@ export default function YoursOCR() {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
 
-      // download individual files
-      processedResults.forEach((result) => {
-        const fileName = result.name.replace(/\.[^/.]+$/, "");
-        const blob = new Blob([result.extractedText], { type: "text/plain" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `${fileName}.txt`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-      });
-
-      setNotificationMessage("All files downloaded!");
+      setNotificationMessage("Combined file downloaded!");
       setShowNotification(true);
       setTimeout(() => setShowNotification(false), 2000);
     }
@@ -221,6 +318,7 @@ export default function YoursOCR() {
   };
 
   const currentResult = processedResults[currentImageIndex];
+  const hasAnySpellChecked = processedResults.some((r) => r.isSpellChecked);
 
   return (
     <div
@@ -258,7 +356,7 @@ export default function YoursOCR() {
       {/* Instructions Modal */}
       {showInstructions && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-start justify-center pt-20 z-50">
-          <div className="bg-gray-100 rounded-lg p-8 max-w-3xl w-full mx-4 relative">
+          <div className="bg-gray-100 rounded-lg p-8 max-w-3xl w-full mx-4 relative max-h-[80vh] overflow-y-auto">
             <button
               onClick={() => setShowInstructions(false)}
               className="absolute top-4 right-4 text-gray-600 hover:text-gray-800"
@@ -289,16 +387,25 @@ export default function YoursOCR() {
                 between results. You can edit the extracted text directly.
               </p>
               <p>
-                5. Copy or Download: Use "Copy Text" to copy current text to
+                5. Spell Check: Click "Check Spelling" to improve text accuracy
+                using AI. For multiple images, choose to check current or all
+                results.
+              </p>
+              <p>
+                6. Revert: Use "Revert to OCR Result" to restore original OCR
+                text before spell checking.
+              </p>
+              <p>
+                7. Copy or Download: Use "Copy Text" to copy current text to
                 clipboard, or "Download" to save files.
               </p>
               <p>
-                6. Download Options: Single image creates one .txt file.
+                8. Download Options: Single image creates one .txt file.
                 Multiple images create individual .txt files plus a combined
                 file with all results.
               </p>
               <p>
-                7. Reset: Click "Cancel" to clear and start over with new files.
+                9. Reset: Click "Cancel" to clear and start over with new files.
               </p>
               <p>
                 Privacy & Data Handling: Your uploaded images are processed on
@@ -322,7 +429,9 @@ export default function YoursOCR() {
         <div
           className={`fixed top-4 right-4 ${
             notificationMessage.includes("success") ||
-            notificationMessage.includes("downloaded")
+            notificationMessage.includes("downloaded") ||
+            notificationMessage.includes("completed") ||
+            notificationMessage.includes("Reverted")
               ? "bg-green-500"
               : "bg-red-500"
           } text-white px-6 py-3 rounded shadow-lg z-50`}
@@ -484,6 +593,11 @@ export default function YoursOCR() {
                 </button>
                 <span className="text-lg" style={{ color: "#000000" }}>
                   Image {currentImageIndex + 1} of {processedResults.length}
+                  {currentResult.isSpellChecked && (
+                    <span className="ml-2 text-sm text-green-600">
+                      (Spell Checked)
+                    </span>
+                  )}
                 </span>
                 <button
                   onClick={goToNext}
@@ -499,6 +613,12 @@ export default function YoursOCR() {
             <div className="mb-4">
               <h3 className="text-lg mb-2" style={{ color: "#000000" }}>
                 {currentResult.name}
+                {currentResult.isSpellChecked &&
+                  processedResults.length === 1 && (
+                    <span className="ml-2 text-sm text-green-600">
+                      (Spell Checked)
+                    </span>
+                  )}
               </h3>
               <div className="border-2 border-gray-300 rounded-lg p-4 bg-white">
                 <img
@@ -526,20 +646,98 @@ export default function YoursOCR() {
             </div>
 
             {/* Action Buttons */}
-            <div className="flex justify-end gap-4">
-              <button
-                onClick={handleCopyText}
-                className="px-8 py-2 border border-gray-400 rounded text-gray-700 bg-white hover:bg-gray-50"
-              >
-                Copy Text
-              </button>
-              <button
-                onClick={handleDownload}
-                className="px-8 py-2 text-white rounded"
-                style={{ backgroundColor: "#626262" }}
-              >
-                Download {processedResults.length > 1 ? "All" : "txt"}
-              </button>
+            <div className="flex justify-between items-center gap-4 mb-4">
+              <div className="flex gap-4">
+                {/* Check Spelling Button */}
+                <div className="relative">
+                  <button
+                    onClick={() => {
+                      if (processedResults.length === 1) {
+                        handleSpellCheck(false);
+                      } else {
+                        setShowSpellCheckMenu(!showSpellCheckMenu);
+                      }
+                    }}
+                    disabled={spellCheckLoading}
+                    className="px-6 py-2 border border-gray-400 rounded text-gray-700 bg-white hover:bg-gray-50 flex items-center gap-2 disabled:opacity-50"
+                  >
+                    <CheckCircle size={20} />
+                    {spellCheckLoading ? "Checking..." : "Check Spelling"}
+                  </button>
+
+                  {/* Dropdown for multiple images */}
+                  {showSpellCheckMenu && processedResults.length > 1 && (
+                    <div className="absolute top-full mt-2 left-0 bg-white border border-gray-300 rounded shadow-lg z-10 min-w-[200px]">
+                      <button
+                        onClick={() => handleSpellCheck(false)}
+                        className="w-full px-4 py-2 text-left hover:bg-gray-100 text-gray-700"
+                      >
+                        Current Result Only
+                      </button>
+                      <button
+                        onClick={() => handleSpellCheck(true)}
+                        className="w-full px-4 py-2 text-left hover:bg-gray-100 text-gray-700 border-t"
+                      >
+                        Check All Results
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Revert Button */}
+                {hasAnySpellChecked && (
+                  <div className="relative">
+                    <button
+                      onClick={() => {
+                        if (processedResults.length === 1) {
+                          handleRevertToOCR(false);
+                        } else {
+                          setShowRevertMenu(!showRevertMenu);
+                        }
+                      }}
+                      className="px-6 py-2 border border-gray-400 rounded text-gray-700 bg-white hover:bg-gray-50 flex items-center gap-2"
+                    >
+                      <RotateCcw size={20} />
+                      Revert to OCR Result
+                    </button>
+
+                    {/* Dropdown for multiple images */}
+                    {showRevertMenu && processedResults.length > 1 && (
+                      <div className="absolute top-full mt-2 left-0 bg-white border border-gray-300 rounded shadow-lg z-10 min-w-[200px]">
+                        <button
+                          onClick={() => handleRevertToOCR(false)}
+                          disabled={!currentResult.isSpellChecked}
+                          className="w-full px-4 py-2 text-left hover:bg-gray-100 text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Current Result Only
+                        </button>
+                        <button
+                          onClick={() => handleRevertToOCR(true)}
+                          className="w-full px-4 py-2 text-left hover:bg-gray-100 text-gray-700 border-t"
+                        >
+                          Revert All Results
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex gap-4">
+                <button
+                  onClick={handleCopyText}
+                  className="px-8 py-2 border border-gray-400 rounded text-gray-700 bg-white hover:bg-gray-50"
+                >
+                  Copy Text
+                </button>
+                <button
+                  onClick={handleDownload}
+                  className="px-8 py-2 text-white rounded"
+                  style={{ backgroundColor: "#626262" }}
+                >
+                  Download {processedResults.length > 1 ? "All" : "txt"}
+                </button>
+              </div>
             </div>
           </div>
         )}
