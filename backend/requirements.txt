@@ -8,3 +8,5 @@ tensorflow
 python-dotenv
 torch
 scikit-learn
+symspellpy
+pydantic

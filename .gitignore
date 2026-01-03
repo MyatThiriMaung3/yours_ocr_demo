@@ -28,5 +28,7 @@ frontend/yours_ocr_react/*.local
 # ignore cropped images
 backend/cropped_words/*
 
+# ignore python cache files
 __pycache__/
 *.pyc
+
