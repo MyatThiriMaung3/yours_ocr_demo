@@ -30,15 +30,11 @@ pip install -r requirements.txt
 
 ### 3. Place Model Files
 
-Copy your trained models to:
+Copy your trained models to respective paths.
 ```
-backend/trained_models/
-├── detector/
-│   ├── weights
-│   └── metadata.json
-└── recognizer/
-    ├── word_model_2809_words.pth
-    └── word_label_encoder_2809_words.pkl
+backend/trained_models/detector/
+backend/trained_models/recognizer/
+
 ```
 
 ### 4. Run Server
@@ -50,12 +46,12 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 ### Health Check
 ```
-GET http://localhost:8000/api/v1/health
+GET http://localhost:8000/health
 ```
 
 ### Extract Text
 ```
-POST http://localhost:8000/api/v1/extract-text
+POST http://localhost:8000/extract-text
 Content-Type: multipart/form-data
 
 file: <image file>
@@ -84,45 +80,24 @@ Response:
 }
 ```
 
-## Testing
+### Check spelling with symspell
 
-### Using cURL
-```bash
-curl -X POST "http://localhost:8000/api/v1/extract-text" \
-  -H "Content-Type: multipart/form-data" \
-  -F "file=@test_image.jpg"
+```
+http://localhost:8000/check-spelling
+```
+Content-Type:
+```
+json
+{
+  "text": "John works at NASA and recieved the documnet"
+}
 ```
 
-### Using Browser
-Navigate to: http://localhost:8000/docs
-
-## Directory Structure
+Response:
 ```
-backend/
-├── app/
-│   ├── __init__.py
-│   ├── main.py
-│   ├── models/
-│   │   ├── __init__.py
-│   │   ├── aabb.py
-│   │   ├── aabb_clustering.py
-│   │   ├── coding.py
-│   │   ├── net.py
-│   │   ├── resnet.py
-│   │   ├── utils.py
-│   │   ├── word_detector.py
-│   │   ├── word_recognizer.py
-│   │   └── ocr_pipeline.py
-│   ├── utils/
-│   │   ├── __init__.py
-│   │   └── image_processing.py
-│   └── api/
-│       ├── __init__.py
-│       └── routes.py
-├── trained_models/
-│   ├── detector/
-│   └── recognizer/
-├── requirements.txt
-├── .env
-└── README.md
+json
+{
+    "success": true,
+    "corrected_text": "John works at NASA and received the document"
+}
 ```

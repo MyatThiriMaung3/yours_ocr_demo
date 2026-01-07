@@ -12,11 +12,7 @@ from .aabb_clustering import cluster_aabbs
 from .utils import compute_scale_down
 
 
-class WordDetector:
-    """
-    Word detector using exact logic from original infer.py
-    """
-    
+class WordDetector: 
     def __init__(self, model_path: str, metadata_path: str, device: str = "cpu"):
         """
         Initialize word detector

@@ -13,14 +13,14 @@ class WordRecognizerCTC:
         Initialize the CTC-based word recognizer
         
         Args:
-            model_path: Path to the saved .keras or .h5 model file
+            model_path: Path to the saved .keras model file
             char_config_path: Path to char_config.pkl or char_config.json
         """
         self.model = None
         self.char_to_num = None
         self.num_to_char = None
         self.characters = None
-        self.max_len = 21  # From your training
+        self.max_len = 21
         self.width = 128
         self.height = 32
         self.padding_token = 99
@@ -42,7 +42,7 @@ class WordRecognizerCTC:
             if str(model_path).endswith('.keras'):
                 self.model = keras.models.load_model(model_path, compile=False)
             elif str(model_path).endswith('.h5'):
-                # For .h5 files, try different approaches
+                # For .h5 files, try loading as full model
                 try:
                     self.model = keras.models.load_model(model_path, compile=False)
                 except:
